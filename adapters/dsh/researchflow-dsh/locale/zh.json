@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ResearchFlow 科研实验工作流",
+    "description": "通过 rf CLI 组合、执行、验证可追溯的科研实验树：运行节点、统一比较、决策留痕、导出复现包。"
+  }
+}

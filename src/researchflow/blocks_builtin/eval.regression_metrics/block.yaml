@@ -1,0 +1,36 @@
+id: eval.regression_metrics
+version: 0.1.0
+schema_version: 1
+category: evaluate
+title: 回归指标评价
+description: 由预测表（y_true/y_pred）计算 RMSE / MAE / R² / MAPE。
+kind: python
+entry: impl:evaluate
+
+inputs:
+  predictions:
+    type: table
+    description: 预测表（须含 y_true、y_pred 列）
+    schema:
+      required_columns: [y_true, y_pred]
+
+outputs:
+  metrics:
+    type: metrics
+    description: 指标集合（JSON）
+
+params:
+  type: object
+  properties:
+    metrics:
+      type: array
+      default: [rmse, mae, r2]
+      description: 指标子集，可选 rmse / mae / r2 / mape
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

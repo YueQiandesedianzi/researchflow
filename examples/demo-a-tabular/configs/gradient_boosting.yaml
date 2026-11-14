@@ -1,0 +1,7 @@
+estimator: sklearn.ensemble.GradientBoostingRegressor
+params:
+  n_estimators: 200
+  random_state: 42
+features: all_numeric
+target: sigma
+standardize: false

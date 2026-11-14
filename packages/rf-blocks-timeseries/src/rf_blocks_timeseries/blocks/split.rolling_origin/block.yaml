@@ -1,0 +1,36 @@
+id: split.rolling_origin
+version: 0.1.0
+schema_version: 1
+category: data_split
+title: 滚动原点划分
+description: 时序交叉验证：每个折的训练集截止于测试集开始之前（可扩展或滑动窗口）。
+kind: python
+entry: impl:rolling_origin
+
+inputs:
+  dataset:
+    type: table
+    description: 含时间列的数据表
+
+outputs:
+  folds:
+    type: indices
+    description: 折索引集合（[{train, test}, ...]，按时间推进）
+
+params:
+  type: object
+  required: [time_column]
+  properties:
+    time_column: {type: string}
+    n_splits: {type: integer, default: 3, minimum: 2, maximum: 10}
+    test_size: {type: number, default: 0.15, minimum: 0.02, maximum: 0.4}
+    gap: {type: integer, default: 0, minimum: 0}
+
+validation:
+  - non_empty_splits
+  - no_time_leakage
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

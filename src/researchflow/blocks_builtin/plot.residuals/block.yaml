@@ -1,0 +1,31 @@
+id: plot.residuals
+version: 0.1.0
+schema_version: 1
+category: visualize
+title: 残差图
+description: 残差直方图 + 残差 vs 预测值散点，用于误差结构检查。
+kind: python
+entry: impl:residuals
+
+inputs:
+  predictions:
+    type: table
+    description: 预测表（须含 y_true、y_pred 列）
+
+outputs:
+  figure:
+    type: figure
+    description: residuals.png
+
+params:
+  type: object
+  properties:
+    title: {type: string, default: Residuals}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

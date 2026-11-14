@@ -1,0 +1,17 @@
+# ResearchFlow 实验工作树
+# 文档: docs/04-experiment-tree.md
+schema_version: 1
+project: __PROJECT__
+meta:
+  created_by: rf init
+nodes:
+  # 示例节点（取消注释并按需修改）：
+  # - id: load-01
+  #   kind: execution
+  #   block: io.load_csv@^0.1.0
+  #   params: {path: data/raw.csv, target: y}
+  - id: placeholder-01
+    kind: execution
+    block: io.load_csv@^0.1.0
+    title: 占位节点——请编辑 plan.yaml 搭建你的工作树
+    params: {path: data/raw.csv}

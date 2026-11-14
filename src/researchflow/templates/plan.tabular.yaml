@@ -1,0 +1,39 @@
+schema_version: 1
+project: __PROJECT__
+meta:
+  created_by: rf init --template tabular
+nodes:
+  - id: load-01
+    kind: execution
+    block: io.load_csv@^0.1.0
+    title: 载入原始数据（修改 params.path 指向你的 CSV）
+    params: {path: data/raw.csv, target: y}
+
+  - id: split-01
+    kind: execution
+    block: split.random_holdout@^0.1.0
+    params: {test_size: 0.2, seed: 42}
+    inputs:
+      dataset: {from: load-01.outputs.table}
+
+  - id: model-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    params: {config: configs/ridge.yaml}
+    inputs:
+      dataset: {from: load-01.outputs.table}
+      train_indices: {from: split-01.outputs.train_indices}
+
+  - id: pred-01
+    kind: execution
+    block: model.predict@^0.1.0
+    inputs:
+      model: {from: model-01.outputs.model}
+      dataset: {from: load-01.outputs.table}
+      indices: {from: split-01.outputs.test_indices}
+
+  - id: eval-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-01.outputs.predictions}

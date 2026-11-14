@@ -1,0 +1,6 @@
+estimator: sklearn.linear_model.Ridge
+params:
+  alpha: 1.0
+features: all_numeric
+target: y
+standardize: true

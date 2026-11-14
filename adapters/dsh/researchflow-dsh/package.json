@@ -1,0 +1,23 @@
+{
+  "name": "@researchflow/dsh-adapter",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "ResearchFlow DSH adapter: agent tools and /researchflow command backed by the rf CLI",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

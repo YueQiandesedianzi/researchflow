@@ -1,0 +1,42 @@
+id: model.predict
+version: 0.1.0
+schema_version: 1
+category: model
+title: 模型预测
+description: 用训练好的模型对指定索引行预测，输出 y_true/y_pred 预测表（可携带索引列如时间）。
+kind: python
+entry: impl:predict
+
+inputs:
+  model:
+    type: model
+    description: model.train_sklearn 产出的模型包
+  dataset:
+    type: table
+    description: 特征+目标数据表（与训练时同构）
+  indices:
+    type: indices
+    description: 待预测行索引（如 test_indices）
+
+outputs:
+  predictions:
+    type: table
+    description: 预测表（index_columns + y_true + y_pred）
+    schema:
+      required_columns: [y_true, y_pred]
+
+params:
+  type: object
+  properties:
+    index_columns:
+      type: array
+      description: 携带到预测表的索引列（如时间列），默认 []
+
+validation:
+  - file_exists
+  - schema_matches
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 600

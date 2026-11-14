@@ -1,0 +1,32 @@
+id: plot.parity
+version: 0.1.0
+schema_version: 1
+category: visualize
+title: Parity 图
+description: y_true vs y_pred 散点 + 对角线，论文常用的预测一致性图。
+kind: python
+entry: impl:parity
+
+inputs:
+  predictions:
+    type: table
+    description: 预测表（须含 y_true、y_pred 列）
+
+outputs:
+  figure:
+    type: figure
+    description: parity.png
+
+params:
+  type: object
+  properties:
+    title: {type: string, default: Parity plot}
+    max_points: {type: integer, default: 5000, minimum: 100}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

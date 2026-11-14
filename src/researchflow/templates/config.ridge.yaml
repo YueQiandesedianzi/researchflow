@@ -1,0 +1,7 @@
+# model.train_sklearn 的模型配置（配置驱动：换模型只改这里）
+estimator: sklearn.linear_model.Ridge
+params:
+  alpha: 1.0
+features: all_numeric   # 或显式列名数组 [x1, x2]
+target: y               # 目标列名（时序模板中请改为你的目标列）
+standardize: true

@@ -1,0 +1,40 @@
+id: features.lag
+version: 0.1.0
+schema_version: 1
+category: feature
+title: 滞后/滚动特征构造
+description: >-
+  按时间排序后构造目标列的滞后特征（lag_k）与滚动统计（roll*，基于 shift(1) 防泄漏），
+  输出特征表（保留时间列与目标列）。
+kind: python
+entry: impl:lag
+
+inputs:
+  dataset:
+    type: table
+    description: 含时间列与目标列的数据表
+
+outputs:
+  table:
+    type: table
+    description: 特征表（时间列 + 原数值列 + 滞后/滚动特征 + 目标列）
+
+params:
+  type: object
+  required: [time_column, target]
+  properties:
+    time_column: {type: string}
+    target: {type: string, description: 目标列名}
+    lags: {type: array, default: [1, 2, 3], description: 滞后阶数列表}
+    rolling:
+      type: array
+      description: "滚动统计配置 [{window: 3, agg: mean}]，agg 可选 mean/std/min/max"
+    drop_na: {type: boolean, default: true, description: 丢弃滞后产生的 NaN 行}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

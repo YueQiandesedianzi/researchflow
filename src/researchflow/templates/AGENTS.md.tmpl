@@ -1,0 +1,36 @@
+# AGENTS.md — __PROJECT__
+
+本项目由 **ResearchFlow** 管理实验。无论 DSH 还是 Codex 会话，均须遵守以下规范。
+
+## 三条铁律
+
+1. **实验必过 rf**：所有实验一律经 `rf` CLI（或 `python -m researchflow`）执行；
+   禁止手写脚本直接读写 `.researchflow/`。
+2. **复用积木**：新增实验 = 编辑 plan.yaml + 复用/新增积木（配置驱动）；
+   禁止复制既有脚本改参数。模型差异写在 `configs/*.yaml`。
+3. **决策未过不引用**：决策节点（decision）未通过前，其下游结果不得用于论文或报告。
+
+## 常用命令
+
+```sh
+rf plan validate        # 校验工作树（结构 + 积木契约）
+rf plan show            # 输出 Mermaid 流程图（带运行状态）
+rf run <node-id>        # 运行节点（自动补跑未完成的上游）
+rf run --all --yes      # 运行整棵树（--yes 自动批准审批型积木）
+rf status               # 节点状态一览
+rf runs show <RUN-id>   # 单次运行的完整记录
+rf compare <节点|RUN>... --baseline <节点|RUN>
+rf decide <node> --pass|--fail --comment "..."
+rf export --nodes a,b --out <dir> --verify
+rf doctor               # 一致性检查
+```
+
+所有命令支持 `--json`（有界 JSON 输出）与 `-C <项目目录>`。
+退出码：0 成功｜2 契约/校验失败｜3 运行失败｜4 等待人工审批/决策。
+
+## 新增积木
+
+1. 用 `rf blocks list` 检索现有积木，优先复用；
+2. 确需新增：在 `blocks/<category>.<name>/` 下编写 `block.yaml`（契约）+
+   `impl.py`（实现），签名见任意内置积木；
+3. `rf blocks check blocks/<category>.<name>` 校验契约后再接入 plan.yaml。

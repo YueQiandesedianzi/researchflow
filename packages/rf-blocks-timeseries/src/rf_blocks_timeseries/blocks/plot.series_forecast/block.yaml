@@ -1,0 +1,34 @@
+id: plot.series_forecast
+version: 0.1.0
+schema_version: 1
+category: visualize
+title: 时序预测对照图
+description: 真实值 vs 预测值随时间的对照曲线（预测表须含时间列，由 model.predict 的 index_columns 携带）。
+kind: python
+entry: impl:series_forecast
+
+inputs:
+  predictions:
+    type: table
+    description: 预测表（须含时间列与 y_true、y_pred）
+
+outputs:
+  figure:
+    type: figure
+    description: forecast.png
+
+params:
+  type: object
+  required: [time_column]
+  properties:
+    time_column: {type: string}
+    title: {type: string, default: Forecast vs actual}
+    max_points: {type: integer, default: 2000, minimum: 100}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

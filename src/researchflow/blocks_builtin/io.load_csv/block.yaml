@@ -1,0 +1,31 @@
+id: io.load_csv
+version: 0.1.0
+schema_version: 1
+category: io
+title: 载入 CSV 数据表
+description: 从项目相对路径载入 CSV，登记源文件指纹（meta.json），输出规范化表格产物。
+kind: python
+entry: impl:load_csv
+
+inputs: {}
+
+outputs:
+  table:
+    type: table
+    description: 规范化后的数据表（CSV）
+
+params:
+  type: object
+  required: [path]
+  properties:
+    path: {type: string, description: 项目相对路径的 CSV 文件}
+    target: {type: string, description: 目标列名（可选，记入 meta）}
+    time_column: {type: string, description: 时间列名（可选，记入 meta）}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

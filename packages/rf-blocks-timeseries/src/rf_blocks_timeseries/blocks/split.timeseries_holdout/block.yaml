@@ -1,0 +1,34 @@
+id: split.timeseries_holdout
+version: 0.1.0
+schema_version: 1
+category: data_split
+title: 时序留出划分
+description: 按时间顺序划分训练/测试集（不打乱），支持 gap 间隔防边界泄漏。
+kind: python
+entry: impl:timeseries_holdout
+
+inputs:
+  dataset:
+    type: table
+    description: 含时间列的数据表
+
+outputs:
+  train_indices: {type: indices, description: 训练集行索引（时间较早段）}
+  test_indices: {type: indices, description: 测试集行索引（时间较晚段）}
+
+params:
+  type: object
+  required: [time_column]
+  properties:
+    time_column: {type: string, description: 时间列名（可解析为日期时间）}
+    test_size: {type: number, default: 0.2, minimum: 0.05, maximum: 0.5}
+    gap: {type: integer, default: 0, minimum: 0, description: 训练与测试之间剔除的行数}
+
+validation:
+  - non_empty_splits
+  - no_time_leakage
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

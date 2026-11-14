@@ -1,0 +1,33 @@
+id: features.select
+version: 0.1.0
+schema_version: 1
+category: feature
+title: 特征选择
+description: 配置化选列/丢列（include/exclude），keep 列始终保留。
+kind: python
+entry: impl:select
+
+inputs:
+  dataset:
+    type: table
+    description: 输入数据表
+
+outputs:
+  table:
+    type: table
+    description: 选列后的数据表
+
+params:
+  type: object
+  properties:
+    include: {type: array, description: 只保留这些列（与 exclude 互斥）}
+    exclude: {type: array, description: 丢弃这些列}
+    keep: {type: array, description: 始终保留的列（如目标列）}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

@@ -1,0 +1,54 @@
+schema_version: 1
+project: __PROJECT__
+meta:
+  created_by: rf init --template timeseries
+nodes:
+  - id: load-01
+    kind: execution
+    block: io.load_csv@^0.1.0
+    title: 载入时序数据（修改 params.path 指向你的 CSV）
+    params: {path: data/series.csv, time_column: time, target: y}
+
+  - id: lag-01
+    kind: execution
+    block: features.lag@^0.1.0
+    params: {time_column: time, target: y, lags: [1, 2, 3, 24]}
+    inputs:
+      dataset: {from: load-01.outputs.table}
+
+  - id: split-01
+    kind: execution
+    block: split.timeseries_holdout@^0.1.0
+    params: {time_column: time, test_size: 0.2, gap: 0}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+
+  - id: model-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    params: {config: configs/ridge.yaml}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+      train_indices: {from: split-01.outputs.train_indices}
+
+  - id: pred-01
+    kind: execution
+    block: model.predict@^0.1.0
+    params: {index_columns: [time]}
+    inputs:
+      model: {from: model-01.outputs.model}
+      dataset: {from: lag-01.outputs.table}
+      indices: {from: split-01.outputs.test_indices}
+
+  - id: eval-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-01.outputs.predictions}
+
+  - id: plot-01
+    kind: execution
+    block: plot.series_forecast@^0.1.0
+    params: {time_column: time}
+    inputs:
+      predictions: {from: pred-01.outputs.predictions}

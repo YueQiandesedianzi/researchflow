@@ -1,0 +1,105 @@
+schema_version: 1
+project: demo-b-timeseries
+meta:
+  created_by: human
+  intent: 时序回归 demo——滞后特征 + 时序防泄漏划分 + 双模型对照 + 滚动原点验证
+nodes:
+  - id: load-01
+    kind: execution
+    block: io.load_csv@^0.1.0
+    title: 载入传感器时序
+    params: {path: data/series.csv, time_column: time, target: y}
+
+  - id: lag-01
+    kind: execution
+    block: features.lag@^0.1.0
+    title: 滞后/滚动特征（shift(1) 防前视）
+    params:
+      time_column: time
+      target: y
+      lags: [1, 2, 3, 24, 48]
+      rolling: [{window: 24, agg: mean}, {window: 168, agg: mean}]
+    inputs:
+      dataset: {from: load-01.outputs.table}
+
+  - id: split-ts-01
+    kind: execution
+    block: split.timeseries_holdout@^0.1.0
+    title: 时序留出（gap=24h）
+    params: {time_column: time, test_size: 0.15, gap: 24}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+
+  - id: rolling-01
+    kind: execution
+    block: split.rolling_origin@^0.1.0
+    title: 滚动原点划分（支线，演示时序 CV 验证器）
+    params: {time_column: time, n_splits: 3, test_size: 0.1, gap: 24}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+
+  - id: model-ridge-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    title: 基线 Ridge
+    params: {config: configs/ridge_ts.yaml}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+      train_indices: {from: split-ts-01.outputs.train_indices}
+
+  - id: pred-ridge-01
+    kind: execution
+    block: model.predict@^0.1.0
+    params: {index_columns: [time]}
+    inputs:
+      model: {from: model-ridge-01.outputs.model}
+      dataset: {from: lag-01.outputs.table}
+      indices: {from: split-ts-01.outputs.test_indices}
+
+  - id: eval-ridge-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-ridge-01.outputs.predictions}
+
+  - id: model-rf-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    title: 随机森林
+    params: {config: configs/rf_ts.yaml}
+    inputs:
+      dataset: {from: lag-01.outputs.table}
+      train_indices: {from: split-ts-01.outputs.train_indices}
+
+  - id: pred-rf-01
+    kind: execution
+    block: model.predict@^0.1.0
+    params: {index_columns: [time]}
+    inputs:
+      model: {from: model-rf-01.outputs.model}
+      dataset: {from: lag-01.outputs.table}
+      indices: {from: split-ts-01.outputs.test_indices}
+
+  - id: eval-rf-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-rf-01.outputs.predictions}
+
+  - id: plot-rf-forecast
+    kind: execution
+    block: plot.series_forecast@^0.1.0
+    params: {time_column: time, title: RF forecast (demo-b)}
+    inputs:
+      predictions: {from: pred-rf-01.outputs.predictions}
+
+  - id: gate-rf-not-worse
+    kind: decision
+    title: RF 是否不劣于 Ridge（RMSE 在 120% 以内）？
+    inputs:
+      candidate: {from: eval-rf-01.outputs.metrics}
+      baseline: {from: eval-ridge-01.outputs.metrics}
+    criteria:
+      mode: auto
+      expression: "candidate.rmse <= baseline.rmse * 1.2"
+    on_pass: []

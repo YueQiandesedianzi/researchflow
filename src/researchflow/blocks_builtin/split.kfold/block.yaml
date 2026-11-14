@@ -1,0 +1,34 @@
+id: split.kfold
+version: 0.1.0
+schema_version: 1
+category: data_split
+title: K 折划分
+description: 普通 K 折或分组 K 折（group_column 可选），输出折索引集合。
+kind: python
+entry: impl:kfold
+
+inputs:
+  dataset:
+    type: table
+    description: 输入数据表
+
+outputs:
+  folds:
+    type: indices
+    description: 折索引集合（[{train, test}, ...]）
+
+params:
+  type: object
+  properties:
+    n_splits: {type: integer, default: 5, minimum: 2, maximum: 20}
+    seed: {type: integer, default: 42}
+    shuffle: {type: boolean, default: true}
+    group_column: {type: string, description: 提供时使用 GroupKFold}
+
+validation:
+  - non_empty_splits
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

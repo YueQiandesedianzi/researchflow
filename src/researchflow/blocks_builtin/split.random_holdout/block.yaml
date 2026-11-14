@@ -1,0 +1,32 @@
+id: split.random_holdout
+version: 0.1.0
+schema_version: 1
+category: data_split
+title: 随机留出划分
+description: 按固定种子随机划分训练/测试索引。
+kind: python
+entry: impl:random_holdout
+
+inputs:
+  dataset:
+    type: table
+    description: 输入数据表
+
+outputs:
+  train_indices: {type: indices, description: 训练集行索引（0 起始位置索引）}
+  test_indices: {type: indices, description: 测试集行索引}
+
+params:
+  type: object
+  properties:
+    test_size: {type: number, default: 0.2, minimum: 0.05, maximum: 0.5}
+    seed: {type: integer, default: 42}
+    shuffle: {type: boolean, default: true}
+
+validation:
+  - non_empty_splits
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

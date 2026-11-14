@@ -1,0 +1,33 @@
+id: data.inspect
+version: 0.1.0
+schema_version: 1
+category: transform
+title: 数据体检
+description: 输出数据表的行数、列、缺失与类型体检报告（metrics 产物）。
+kind: python
+entry: impl:inspect
+
+inputs:
+  dataset:
+    type: table
+    description: 待体检的数据表
+
+outputs:
+  report:
+    type: metrics
+    description: 体检报告（JSON）
+    schema:
+      required_keys: [rows, n_columns, missing_total]
+
+params:
+  type: object
+  properties: {}
+
+validation:
+  - file_exists
+  - metrics_keys_present
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 300

@@ -1,0 +1,45 @@
+id: model.train_sklearn
+version: 0.1.0
+schema_version: 1
+category: model
+title: 通用 sklearn 回归训练
+description: >-
+  配置驱动的 sklearn 回归训练：estimator 全限定类名 + 超参全部写在 config YAML 里，
+  换模型只改配置不复制代码。请在 config 的 params 中固定 random_state 以保证确定性。
+kind: python
+entry: impl:train
+
+inputs:
+  dataset:
+    type: table
+    description: 特征+目标数据表
+  train_indices:
+    type: indices
+    description: 训练集行索引
+
+outputs:
+  model:
+    type: model
+    description: 训练好的模型包（pickle：pipeline + features + target）
+  train_info:
+    type: json
+    description: 训练摘要（特征清单、样本数、estimator）
+
+params:
+  type: object
+  required: [config]
+  properties:
+    config:
+      type: string
+      description: >-
+        项目相对路径的模型配置 YAML：
+        {estimator: sklearn.xxx.Yyy, params: {...}, features: all_numeric|[列名],
+         target: 列名, standardize: bool}
+
+validation:
+  - file_exists
+
+execution:
+  deterministic: true
+  requires_approval: false
+  timeout_seconds: 3600

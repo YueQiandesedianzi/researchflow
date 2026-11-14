@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# ResearchFlow 运行状态（demo 项目内）
+examples/*/.researchflow/
+examples/*/dist/
+examples/*/report.html
+
+# 环境
+.venv/

@@ -1,0 +1,5 @@
+- insert:
+    - id: researchflow
+      name: '@researchflow/dsh-adapter'
+      config:
+        pythonPath: python

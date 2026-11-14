@@ -1,0 +1,137 @@
+schema_version: 1
+project: demo-a-tabular
+meta:
+  created_by: human
+  intent: 表格回归 demo——分组防泄漏 + 三模型对照 + 双决策节点
+nodes:
+  - id: load-01
+    kind: execution
+    block: io.load_csv@^0.1.0
+    title: 载入合成合金电导率数据
+    params: {path: data/raw/alloys.csv, target: sigma}
+
+  - id: inspect-01
+    kind: execution
+    block: data.inspect@^0.1.0
+    title: 数据体检
+    inputs:
+      dataset: {from: load-01.outputs.table}
+
+  - id: gate-data
+    kind: decision
+    title: 数据量是否足够建模？
+    inputs:
+      candidate: {from: inspect-01.outputs.report}
+    criteria:
+      mode: auto
+      expression: "candidate.rows >= 500"
+    on_pass: [clean-01]
+
+  - id: clean-01
+    kind: execution
+    block: data.clean@^0.1.0
+    title: 去重 + 丢缺失行
+    params: {drop_duplicates: true, na_strategy: drop_rows}
+    inputs:
+      dataset: {from: load-01.outputs.table}
+
+  - id: split-01
+    kind: execution
+    block: split.group_holdout@^0.1.0
+    title: 按成分组留出（防同组泄漏）
+    params: {group_column: composition, test_size: 0.2, seed: 42}
+    inputs:
+      dataset: {from: clean-01.outputs.table}
+
+  - id: model-ridge-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    title: 基线 Ridge
+    params: {config: configs/ridge.yaml}
+    inputs:
+      dataset: {from: clean-01.outputs.table}
+      train_indices: {from: split-01.outputs.train_indices}
+
+  - id: pred-ridge-01
+    kind: execution
+    block: model.predict@^0.1.0
+    inputs:
+      model: {from: model-ridge-01.outputs.model}
+      dataset: {from: clean-01.outputs.table}
+      indices: {from: split-01.outputs.test_indices}
+
+  - id: eval-ridge-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-ridge-01.outputs.predictions}
+
+  - id: model-rf-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    title: 随机森林
+    params: {config: configs/random_forest.yaml}
+    inputs:
+      dataset: {from: clean-01.outputs.table}
+      train_indices: {from: split-01.outputs.train_indices}
+
+  - id: pred-rf-01
+    kind: execution
+    block: model.predict@^0.1.0
+    inputs:
+      model: {from: model-rf-01.outputs.model}
+      dataset: {from: clean-01.outputs.table}
+      indices: {from: split-01.outputs.test_indices}
+
+  - id: eval-rf-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-rf-01.outputs.predictions}
+
+  - id: plot-rf-parity
+    kind: execution
+    block: plot.parity@^0.1.0
+    params: {title: RF parity (demo-a)}
+    inputs:
+      predictions: {from: pred-rf-01.outputs.predictions}
+
+  - id: plot-rf-residuals
+    kind: execution
+    block: plot.residuals@^0.1.0
+    inputs:
+      predictions: {from: pred-rf-01.outputs.predictions}
+
+  - id: model-gbr-01
+    kind: execution
+    block: model.train_sklearn@^0.1.0
+    title: 梯度提升
+    params: {config: configs/gradient_boosting.yaml}
+    inputs:
+      dataset: {from: clean-01.outputs.table}
+      train_indices: {from: split-01.outputs.train_indices}
+
+  - id: pred-gbr-01
+    kind: execution
+    block: model.predict@^0.1.0
+    inputs:
+      model: {from: model-gbr-01.outputs.model}
+      dataset: {from: clean-01.outputs.table}
+      indices: {from: split-01.outputs.test_indices}
+
+  - id: eval-gbr-01
+    kind: execution
+    block: eval.regression_metrics@^0.1.0
+    inputs:
+      predictions: {from: pred-gbr-01.outputs.predictions}
+
+  - id: gate-rf-beats-ridge
+    kind: decision
+    title: RF 是否显著优于 Ridge 基线（RMSE 降低 ≥10%）？
+    inputs:
+      candidate: {from: eval-rf-01.outputs.metrics}
+      baseline: {from: eval-ridge-01.outputs.metrics}
+    criteria:
+      mode: auto
+      expression: "candidate.rmse <= baseline.rmse * 0.9"
+    on_pass: []

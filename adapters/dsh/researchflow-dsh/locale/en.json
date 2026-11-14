@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ResearchFlow",
+    "description": "Composable, verifiable, traceable research experiment trees via the rf CLI: run nodes, compare runs, record decisions, export reproducible packages."
+  }
+}
