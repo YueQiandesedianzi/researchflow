@@ -44,6 +44,20 @@ def train(inputs, params, out_dir, log):
             raise ValueError(f"特征列不存在: {missing}")
     if target not in train_df.columns:
         raise ValueError(f"目标列 {target!r} 不存在")
+    # R7：科学有效性检查——答案不得进入特征、特征不得重复、目标必须数值
+    if target in features:
+        raise ValueError(
+            f"目标列 {target!r} 不允许出现在特征列表中（会把答案直接用于预测，"
+            f"产生虚假的满分指标）")
+    duplicated = sorted({c for c in features if features.count(c) > 1})
+    if duplicated:
+        raise ValueError(f"特征列重复: {duplicated}")
+    if not features:
+        raise ValueError("特征列表为空（检查 features 配置）")
+    if not pd.api.types.is_numeric_dtype(train_df[target]):
+        raise ValueError(
+            f"目标列 {target!r} 必须是数值类型（回归任务），实际 dtype: "
+            f"{train_df[target].dtype}")
 
     cls = _load_class(cfg["estimator"])
     estimator = cls(**(cfg.get("params") or {}))

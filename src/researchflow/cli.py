@@ -308,13 +308,19 @@ def cmd_export(args):
     lines = [f"✓ 已导出: {result['out_dir']}",
              f"  节点: {', '.join(result['nodes'])}",
              f"  积木快照: {', '.join(result['blocks'])}"]
-    if result["verify"] is not None:
-        v = result["verify"]
-        lines.append(f"  verify: {'✓ 通过' if v['ok'] else '✗ 未过'}"
-                     f"（比对 {v.get('compared_metrics', 0)} 项指标）")
-        if not v["ok"]:
-            code = 3
-            return code, result, "\n".join(lines)
+    v = result.get("verify") or {}
+    status = v.get("status")
+    if status == "verified":
+        lines.append(f"  verify: ✓ 通过（指标 {v.get('compared_metrics', 0)} 项 + "
+                     f"产物 {v.get('compared_artifacts', 0)} 项一致）")
+    elif status == "unverifiable":
+        lines.append(f"  verify: ⚠ 无法有效比较（{v.get('reason', '无可比较项')}）")
+        return 3, result, "\n".join(lines)
+    elif status in ("failed",):
+        lines.append(f"  verify: ✗ 未过（{len(v.get('diffs', []))} 处差异，见 VERIFY.json）")
+        return 3, result, "\n".join(lines)
+    elif status == "skipped":
+        lines.append("  verify: 未执行（未加 --verify）")
     return 0, result, "\n".join(lines)
 
 

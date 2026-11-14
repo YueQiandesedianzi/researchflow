@@ -3,7 +3,10 @@ version: 0.1.0
 schema_version: 1
 category: transform
 title: 数据清洗
-description: 配置化的去重与缺失值处理（drop_rows / fill_mean / fill_zero）。
+description: >-
+  配置化的去重与缺失值处理（drop_rows / fill_mean / fill_zero）。
+  fill_mean 属拟合型统计：请提供 train_indices 使统计量仅来自训练集，
+  否则会对含测试集的全量数据取均值（统计泄漏），积木会明确警告。
 kind: python
 entry: impl:clean
 
@@ -11,6 +14,10 @@ inputs:
   dataset:
     type: table
     description: 输入数据表
+  train_indices:
+    type: indices
+    required: false
+    description: 训练集索引；提供时 fill_mean 的均值仅用训练集计算（防统计泄漏）
 
 outputs:
   table:
