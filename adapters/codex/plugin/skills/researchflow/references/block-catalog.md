@@ -45,7 +45,13 @@ standardize: false
 
 ## 新增项目级积木
 
-目录 `blocks/<category>.<name>/`，两个文件即可：
+**优先用脚手架**（契约立即可过、实现可运行、可真实冒烟）：
+
+```sh
+rf blocks new my.transform --smoke   # 生成 blocks/my.transform/ 并在临时计划里真跑一次
+```
+
+然后编辑 `impl.py` 的 TODO 处即可。手写时目录为 `blocks/<category>.<name>/`，两个文件：
 
 ```yaml
 # block.yaml —— 契约（全部字段必填，除标注可选）

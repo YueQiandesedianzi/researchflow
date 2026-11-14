@@ -31,6 +31,5 @@ rf doctor               # 一致性检查
 ## 新增积木
 
 1. 用 `rf blocks list` 检索现有积木，优先复用；
-2. 确需新增：在 `blocks/<category>.<name>/` 下编写 `block.yaml`（契约）+
-   `impl.py`（实现），签名见任意内置积木；
-3. `rf blocks check blocks/<category>.<name>` 校验契约后再接入 plan.yaml。
+2. 确需新增：`rf blocks new <category>.<name> --smoke` 生成可运行骨架并真实冒烟；
+3. 编辑 `impl.py` 的 TODO 处实现逻辑，`rf blocks check` 校验后接入 plan.yaml。

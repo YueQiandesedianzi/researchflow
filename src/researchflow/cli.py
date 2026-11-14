@@ -51,8 +51,11 @@ def build_parser():
     add("doctor", help="一致性检查")
 
     sp = add("blocks", help="积木目录")
-    sp.add_argument("action", choices=["list", "check"])
-    sp.add_argument("path", nargs="?", help="check 时的积木目录")
+    sp.add_argument("action", choices=["list", "check", "new"])
+    sp.add_argument("path", nargs="?", help="check 时的积木目录 / new 时的积木 id")
+    sp.add_argument("--title", help="new 时的积木标题")
+    sp.add_argument("--force", action="store_true", help="new 时覆盖已存在目录")
+    sp.add_argument("--smoke", action="store_true", help="new 后在临时计划中真实跑一次")
 
     sp = add("plan", help="实验工作树")
     sp.add_argument("action", choices=["validate", "show"])
@@ -129,6 +132,28 @@ def cmd_blocks(args):
         block = load_block(args.path, "local", 3)
         return 0, {"block": block.ref, "source": str(block.dir)}, \
             f"✓ 契约有效: {block.ref}（{block.title}）"
+
+    if args.action == "new":
+        from researchflow.blocks.scaffold import scaffold, smoke_test
+
+        if not args.path:
+            raise ProjectNotFoundError("blocks new 需要积木 id（形如 category.name）")
+        project = _open_project(args)
+        result = scaffold(project.root, args.path, title=args.title, force=args.force)
+        text = (f"✓ 积木已创建: {result['block']}（形状 {result['shape']}）\n"
+                f"  目录: {result['dir']}\n"
+                f"  契约校验通过；实现是可运行的 passthrough，请编辑 impl.py 的 TODO 处")
+        if args.smoke:
+            smoke = smoke_test(project.root, args.path)
+            result["smoke"] = smoke
+            if smoke.get("skipped"):
+                text += f"\n  冒烟: 跳过（{smoke['skipped']}）"
+            elif smoke.get("ok"):
+                text += "\n  冒烟: ✓ 临时计划真实运行通过"
+            else:
+                text += f"\n  冒烟: ✗ 运行失败 {smoke.get('results')}"
+                return 3, result, text
+        return 0, result, text
 
     try:
         project = _open_project(args)
