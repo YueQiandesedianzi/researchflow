@@ -139,7 +139,7 @@ Core 不知道 Agent 的存在；一切能力经 `rf --json` CLI（退出码 0/2
 | **Codex** | Skill 原型（`.agents/skills/researchflow/`，渐进披露） | ✅ [adapters/codex](adapters/codex) |
 | **DSH（DeepSeek Harness）** | Cordis 插件：9 个 Agent Tools + `/researchflow` 命令 | ✅ [adapters/dsh](adapters/dsh) |
 | **Codex Plugin + MCP** | `.codex-plugin/plugin.json` + `researchflow-mcp`（9 工具，协议级测试通过） | ✅ [adapters/codex/plugin](adapters/codex/plugin) |
-| **DSH Slots 实时面板** | 实验树面板、节点操作、决策按钮 | V1.0 计划 |
+| **DSH 可视化工作台** | `shell.overlay` 抽屉面板 + 独立页面 `/researchflow`：运行节点、决策按钮、实时刷新 | ✅ [adapters/dsh-workbench](adapters/dsh-workbench) |
 
 ## 架构
 
@@ -191,7 +191,7 @@ flowchart TB
 | V0.2 | Codex Skill 原型 | ✅ |
 | V0.3 | DSH Cordis 插件（Agent Tools + 命令） | ✅ |
 | V0.4 | Codex Plugin + MCP server | ✅ |
-| V1.0 | DSH Slots 可视化实验工作台 | 计划中 |
+| V1.0 | DSH 可视化实验工作台（overlay 面板 + 独立页面） | ✅ |
 
 ## 文档
 

@@ -92,6 +92,7 @@ def build_parser():
 
     sp = add("report", help="生成单文件 HTML 实验工作台报告")
     sp.add_argument("--out", help="输出路径（默认 <项目>/report.html）")
+    sp.add_argument("--data", action="store_true", help="只输出工作台数据载荷（JSON），不写 HTML")
     return p
 
 
@@ -292,8 +293,10 @@ def cmd_export(args):
 
 
 def cmd_report(args):
-    from researchflow.report.report import generate
+    from researchflow.report.report import collect, generate
 
+    if getattr(args, "data", False):
+        return 0, collect(_open_project(args)), "（工作台数据载荷）"
     out = generate(_open_project(args), args.out)
     return 0, {"report": str(out)}, \
         f"✓ 报告已生成: {out}\n用浏览器打开即可查看（单文件、离线可用）"

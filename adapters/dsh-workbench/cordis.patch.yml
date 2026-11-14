@@ -1,0 +1,6 @@
+- insert:
+    - id: researchflow-workbench
+      name: '@researchflow/dsh-workbench'
+      config:
+        pythonPath: python
+        defaultProject: E:\开发\ResearchFlow\examples\demo-a-tabular
