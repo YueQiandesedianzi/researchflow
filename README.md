@@ -51,6 +51,13 @@ ResearchFlow 的答案是三个一等公民：
   <sub>时序回归 demo：滞后特征 → 时序防泄漏划分 → 双模型对照 → 决策通过。</sub>
 </p>
 
+**DSH 在线工作台**（`adapters/dsh-workbench` 插件提供，独立页面 + 应用内悬浮球入口）：
+
+<p align="center">
+  <img src="docs/images/workbench-live.png" alt="DSH 在线实验工作台" width="90%"><br>
+  <sub>五标签实时工作台：实验树（缩放/运行/决策）、指标对照、图表、运行记录、决策日志，支持导出复现包。</sub>
+</p>
+
 **实验产物直接就是论文素材：**
 
 <p align="center">
