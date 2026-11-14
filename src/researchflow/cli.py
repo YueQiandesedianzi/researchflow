@@ -336,6 +336,13 @@ _DISPATCH = {
 
 
 def main(argv=None) -> int:
+    # Windows 中文控制台（cp1252/GBK）下打印中文会 UnicodeEncodeError；
+    # 统一重配为 UTF-8（不可重配置的环境静默忽略）
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     args = build_parser().parse_args(argv)
     try:
         code, payload, text = _DISPATCH[args.command](args)
