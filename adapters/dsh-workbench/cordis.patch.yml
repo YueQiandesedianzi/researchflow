@@ -4,3 +4,5 @@
       config:
         pythonPath: python
         defaultProject: E:\开发\ResearchFlow\examples\demo-a-tabular
+        allowedRoots:
+          - E:\开发

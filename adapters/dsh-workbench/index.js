@@ -40,15 +40,46 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj))
 }
 
+const MAX_BODY_BYTES = 1024 * 1024
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (c) => chunks.push(c))
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error('请求体超过 1MB 限制'))
+        req.destroy()
+        return
+      }
+      chunks.push(c)
+    })
     req.on('end', () => {
       try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf-8')) : {}) }
       catch (e) { reject(e) }
     })
     req.on('error', reject)
+  })
+}
+
+// 同源校验：带 Origin 的浏览器请求必须与宿主同 host；无 Origin 的本地客户端放行
+function originAllowed(req) {
+  const origin = req.headers.origin
+  if (!origin) return true
+  try {
+    return new URL(origin).host === req.headers.host
+  } catch { return false }
+}
+
+// 项目根目录约束：配置 allowedRoots 时，项目必须落在其中之一（未配置 = 本地信任）
+function projectAllowed(cfg, project) {
+  const roots = Array.isArray(cfg.allowedRoots) ? cfg.allowedRoots : []
+  if (!roots.length || !project) return true
+  const resolved = path.resolve(project)
+  return roots.some((r) => {
+    const root = path.resolve(r)
+    return resolved === root || resolved.startsWith(root + path.sep)
   })
 }
 
@@ -127,6 +158,7 @@ a{color:var(--accent)}
   <button id="reload" class="primary">刷新</button>
   <button id="runall">全部运行</button>
   <button id="exportbtn">导出复现包</button>
+  <label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="yes"> 自动批准审批型积木</label>
 </header>
 <div id="hint"></div>
 <nav id="tabs">
@@ -252,9 +284,10 @@ function decide(id,pass){
     load();
   });
 }
+function yesChecked(){var c=document.getElementById("yes");return c?c.checked:false}
 function runNode(id){
   var b=document.getElementById("runbtn");if(b){b.disabled=true;b.innerHTML='<span class="spin"></span>运行中'}
-  api("/researchflow/api/run",{project:project(),node:id}).then(function(d){
+  api("/researchflow/api/run",{project:project(),node:id,yes:yesChecked()}).then(function(d){
     if(!checkErr(d,"运行"))toast("运行完成："+id);
     load();
   });
@@ -355,7 +388,7 @@ document.querySelectorAll("#tabs button").forEach(function(b){b.onclick=function
 document.getElementById("reload").onclick=load;
 document.getElementById("runall").onclick=function(){
   this.disabled=true;this.innerHTML='<span class="spin"></span>运行中';var btn=this;
-  api("/researchflow/api/run",{project:project(),all:true}).then(function(d){
+  api("/researchflow/api/run",{project:project(),all:true,yes:yesChecked()}).then(function(d){
     btn.disabled=false;btn.textContent="全部运行";
     if(!checkErr(d,"全部运行"))toast("整树运行完成");
     load();
@@ -394,16 +427,24 @@ export function apply(ctx, config) {
         const sub = url.pathname.startsWith('/researchflow/api/')
           ? url.pathname.slice('/researchflow/api/'.length) : ''
         if (sub === 'config') {
-          sendJson(res, 200, { defaultProject: cfg.defaultProject })
+          sendJson(res, 200, { defaultProject: cfg.defaultProject, allowedRoots: cfg.allowedRoots || [] })
           return
         }
         if (sub === 'tree') {
           const project = url.searchParams.get('project') || cfg.defaultProject
+          if (!projectAllowed(cfg, project)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           sendJson(res, 200, await rf(cfg, ['report', '--data', '--json', '-C', project]))
           return
         }
         if (sub === 'run_show') {
           const project = url.searchParams.get('project') || cfg.defaultProject
+          if (!projectAllowed(cfg, project)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           const runId = url.searchParams.get('run_id') || ''
           sendJson(res, 200, await rf(cfg, ['runs', 'show', runId, '--json', '-C', project]))
           return
@@ -411,6 +452,10 @@ export function apply(ctx, config) {
         if (sub === 'artifact') {
           // 只按 Registry 记录解析产物（防路径穿越：绝不直接使用查询路径）
           const project = url.searchParams.get('project') || cfg.defaultProject
+          if (!projectAllowed(cfg, project)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           const runId = url.searchParams.get('run_id') || ''
           const port = url.searchParams.get('port') || ''
           const show = await rf(cfg, ['runs', 'show', runId, '--json', '-C', project])
@@ -434,7 +479,15 @@ export function apply(ctx, config) {
           return
         }
         if (sub === 'decide' && req.method === 'POST') {
+          if (!originAllowed(req)) {
+            sendJson(res, 403, { error: 'Origin 校验失败（仅同源页面可写）' })
+            return
+          }
           const body = await readBody(req)
+          if (!projectAllowed(cfg, body.project || cfg.defaultProject)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           const args = ['decide', body.node, body.pass ? '--pass' : '--fail', '--json',
             '-C', body.project || cfg.defaultProject]
           if (body.comment) args.push('--comment', body.comment)
@@ -442,15 +495,31 @@ export function apply(ctx, config) {
           return
         }
         if (sub === 'run' && req.method === 'POST') {
+          if (!originAllowed(req)) {
+            sendJson(res, 403, { error: 'Origin 校验失败（仅同源页面可写）' })
+            return
+          }
           const body = await readBody(req)
+          if (!projectAllowed(cfg, body.project || cfg.defaultProject)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           const args = ['run', ...(body.all ? ['--all'] : []), ...(body.node ? [body.node] : []),
-            '--yes', '--json', '-C', body.project || cfg.defaultProject]
+            ...(body.yes ? ['--yes'] : []), '--json', '-C', body.project || cfg.defaultProject]
           if (body.no_cache) args.push('--no-cache')
           sendJson(res, 200, await rf(cfg, args, 30 * 60 * 1000))
           return
         }
         if (sub === 'export' && req.method === 'POST') {
+          if (!originAllowed(req)) {
+            sendJson(res, 403, { error: 'Origin 校验失败（仅同源页面可写）' })
+            return
+          }
           const body = await readBody(req)
+          if (!projectAllowed(cfg, body.project || cfg.defaultProject)) {
+            sendJson(res, 403, { error: '项目目录不在 allowedRoots 允许范围内' })
+            return
+          }
           const args = ['export', '--nodes', body.nodes, '--out', body.out, '--json',
             '-C', body.project || cfg.defaultProject]
           if (body.verify) args.push('--verify')

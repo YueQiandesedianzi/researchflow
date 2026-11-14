@@ -53,6 +53,7 @@ class Executor:
         self.results: dict = {}
         self._git_info = None
         self._env_info = None
+        self._lock_file = None
 
     def emit(self, msg):
         if not self.quiet:
@@ -63,7 +64,73 @@ class Executor:
         write_json_atomic(Path(run_dir) / "run.json", run_json)
         self.store.finish_run(run_id, status, run_json)
 
+    # ---------- 执行器互斥（R8：同一项目同一时刻只允许一个执行器） ----------
+
+    def _acquire_lock(self):
+        lock_dir = self.project.rf_dir / "locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        lock = lock_dir / "executor.lock"
+        for _attempt in (1, 2):
+            try:
+                fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump({"pid": os.getpid(), "started_at": now_iso()}, f)
+                self._lock_file = lock
+                return
+            except FileExistsError:
+                try:
+                    info = json.loads(lock.read_text(encoding="utf-8"))
+                    pid = int(info.get("pid", -1))
+                except Exception:
+                    pid = -1
+                if pid > 0 and pid != os.getpid() and self._pid_alive(pid):
+                    raise RunFailedError(
+                        f"另一个执行器正在本项目运行（pid {pid}）。"
+                        f"请等待其完成；确认其已退出则删除 {lock}")
+                try:
+                    lock.unlink()  # 持有者已死：回收陈锁
+                except FileNotFoundError:
+                    pass
+        raise RunFailedError(f"无法获取项目执行锁: {lock}")
+
+    @staticmethod
+    def _pid_alive(pid) -> bool:
+        if sys.platform == "win32":
+            # OpenProcess + GetExitCodeProcess 精确判定；打不开时按 GetLastError
+            # 区分：87 ERROR_INVALID_PARAMETER = 进程不存在（死）；
+            # 5 ERROR_ACCESS_DENIED 等 = 进程存在但无权查看（保守视为活）。
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                # PROCESS_QUERY_LIMITED_INFORMATION：GetExitCodeProcess 所需的最小权限
+                handle = kernel32.OpenProcess(0x1000, False, pid)
+                if not handle:
+                    return ctypes.GetLastError() != 87
+                try:
+                    code = ctypes.c_ulong()
+                    if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                        return True
+                    return code.value == 259  # STILL_ACTIVE
+                finally:
+                    kernel32.CloseHandle(handle)
+            except Exception:
+                pass
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def _release_lock(self):
+        if getattr(self, "_lock_file", None):
+            try:
+                self._lock_file.unlink()
+            except FileNotFoundError:
+                pass
+            self._lock_file = None
+
     def close(self):
+        self._release_lock()
         self.store.close()
 
     # ---------- 环境指纹 ----------
@@ -108,6 +175,14 @@ class Executor:
 
     def run(self, target: str | None = None, run_all: bool = False,
             no_cache: bool = False, yes: bool = False) -> int:
+        self._acquire_lock()
+        try:
+            return self._run_locked(target, run_all, no_cache, yes)
+        finally:
+            self._release_lock()
+
+    def _run_locked(self, target, run_all, no_cache, yes) -> int:
+        # 互斥锁已保证没有另一个存活执行器 → 停留的 running 都是真中断（R8）
         interrupted = self.store.mark_interrupted()
         if interrupted:
             self.emit(f"⚠ 发现 {interrupted} 个中断的运行，已标记 interrupted")
