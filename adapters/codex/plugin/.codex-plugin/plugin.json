@@ -1,0 +1,21 @@
+{
+  "name": "researchflow",
+  "version": "0.4.0",
+  "description": "Composable, verifiable, traceable research experiment trees — blocks, experiment DAG, decision gates, provenance.",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ResearchFlow",
+    "shortDescription": "科研实验工作树",
+    "longDescription": "把科研建模过程组织成可组合、可验证、可追溯的实验工作树：积木契约、实验 DAG、决策留痕、证据链与复现包导出。",
+    "developerName": "ResearchFlow contributors",
+    "category": "research",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/YueQiandesedianzi/researchflow",
+    "defaultPrompt": [
+      "用 researchflow 初始化一个表格回归实验项目",
+      "把数据按分组留出，训练三个模型并统一比较",
+      "导出 eval-rf-01 的复现包并验证"
+    ]
+  }
+}

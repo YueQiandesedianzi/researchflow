@@ -77,6 +77,40 @@ def test_dsh_adapter_bundle_static():
     assert icon.strip().startswith("<svg") and len(icon.encode()) < 256 * 1024
 
 
+def test_codex_plugin_bundle_static():
+    """V0.4 Codex Plugin 打包契约。"""
+    import json
+
+    plugin = REPO / "adapters" / "codex" / "plugin"
+    manifest = json.loads((plugin / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == "researchflow"
+    assert manifest["skills"] == "./skills/"
+    assert manifest["mcpServers"] == "./.mcp.json"
+    mcp_conf = json.loads((plugin / ".mcp.json").read_text(encoding="utf-8"))
+    assert mcp_conf["researchflow"]["args"] == ["-m", "researchflow.mcp"]
+    assert (plugin / "skills" / "researchflow" / "SKILL.md").is_file()
+
+    marketplace = json.loads(
+        (REPO / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
+    entry = marketplace["plugins"][0]
+    assert entry["source"]["type"] == "git-subdir"
+    assert entry["source"]["path"] == "adapters/codex/plugin"
+    assert entry["policy"]["installation"] in ("AVAILABLE", "INSTALLED_BY_DEFAULT")
+
+
+def test_plugin_skill_in_sync():
+    """plugin/skills 是 adapters/codex/skill 的同步副本（防止漂移）。"""
+    import filecmp
+
+    src = REPO / "adapters" / "codex" / "skill" / "researchflow"
+    dst = REPO / "adapters" / "codex" / "plugin" / "skills" / "researchflow"
+    cmp = filecmp.dircmp(src, dst)
+    assert not cmp.left_only and not cmp.right_only and not cmp.diff_files, \
+        f"skill 副本与源不一致: {cmp.left_only} {cmp.right_only} {cmp.diff_files}"
+    for sub in cmp.subdirs.values():
+        assert not sub.left_only and not sub.right_only and not sub.diff_files
+
+
 def test_codex_skill_walkthrough(tmp_path):
     """模拟 Codex Agent 仅凭 SKILL.md 快速上手段落完成全流程。
 

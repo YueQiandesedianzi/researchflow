@@ -86,7 +86,11 @@ SKILL.md 遵循渐进披露：首层只讲"何时用 + 六条核心命令 + 三�
 （实验必过 rf / 复用积木 / 决策未过不引用结果）"，细节按需从 references 加载。
 Agent 经 shell 调 `rf` CLI，无新代码。
 
-### 2.2 V0.4 — 正式 Plugin + MCP
+### 2.2 V0.4 — 正式 Plugin + MCP（✅ 已实现）
+
+> 实现状态：MCP server 位于 `src/researchflow/mcp/`（mcp v2 SDK，stdio），
+> 打包位于 `adapters/codex/plugin/`，marketplace 分发文件在仓库根 `.agents/plugins/`。
+> 协议级集成测试见 `tests/test_mcp.py`。以下为原始设计。
 
 ```text
 researchflow-codex/

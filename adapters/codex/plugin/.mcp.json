@@ -1,0 +1,6 @@
+{
+  "researchflow": {
+    "command": "python",
+    "args": ["-m", "researchflow.mcp"]
+  }
+}
