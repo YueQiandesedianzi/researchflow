@@ -68,15 +68,18 @@ class Project:
         return {"root": str(root), "created": created, "skipped": skipped}
 
 
-def doctor(project: Project) -> dict:
-    """一致性检查（只读）：计划契约、Registry 与文件对照、孤儿产物。"""
+def doctor(project: Project, deep: bool = False) -> dict:
+    """一致性检查（只读）：计划契约、Registry 与文件对照、孤儿产物。
+
+    deep=True 时对抽查产物做完整 sha256 校验（内容完整性证明，较慢）。
+    """
     from researchflow.blocks.contract import check_plan_contracts
     from researchflow.blocks.loader import discover
     from researchflow.plan.model import load_plan
     from researchflow.registry.artifacts import verify_ref
     from researchflow.registry.store import Store
 
-    report = {"ok": True, "checks": []}
+    report = {"ok": True, "checks": [], "deep": deep}
 
     def check(name, ok, detail=""):
         report["checks"].append({"name": name, "ok": bool(ok), "detail": detail})
@@ -111,12 +114,14 @@ def doctor(project: Project) -> dict:
                 checked += 1
                 ok, detail = verify_ref(project.root,
                                         {"path": a["path"], "sha256": a["sha256"]},
-                                        check_hash=False)
+                                        check_hash=deep)
                 if not ok:
                     bad.append(detail)
-        check("artifacts", not bad, f"抽查 {checked} 个产物" + (f"，{len(bad)} 个缺失" if bad else "，无缺失"))
+        mode = "完整哈希校验" if deep else "存在性检查"
+        check("artifacts", not bad,
+              f"抽查 {checked} 个产物（{mode}）" + (f"，{len(bad)} 个异常" if bad else "，无异常"))
         if bad:
-            report["checks"].append({"name": "artifacts.missing", "ok": False,
+            report["checks"].append({"name": "artifacts.corrupt", "ok": False,
                                      "detail": bad[:10]})
 
         run_dirs = {p.name for p in (project.rf_dir / "runs").glob("RUN-*") if p.is_dir()}

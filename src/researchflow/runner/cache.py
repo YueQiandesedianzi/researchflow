@@ -12,11 +12,13 @@ from pathlib import Path
 from researchflow.util import read_json, sha256_json, write_json_atomic
 
 
-def make_cache_key(source_hash: str, params: dict, input_refs: dict) -> str:
+def make_cache_key(source_hash: str, params: dict, input_refs: dict,
+                   file_deps: dict | None = None) -> str:
     return sha256_json({
         "block": source_hash,
         "params": params,
         "inputs": {port: ref["sha256"] for port, ref in sorted(input_refs.items())},
+        "files": {p: d["sha256"] for p, d in sorted((file_deps or {}).items())},
     })
 
 

@@ -9,7 +9,12 @@ from pathlib import Path
 
 from researchflow.util import now_iso
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# 版本 → 从上一版本升级所需的 SQL（顺序执行）
+_MIGRATIONS = {
+    2: "ALTER TABLE decisions ADD COLUMN evidence TEXT",
+}
 
 
 class Store:
@@ -42,6 +47,19 @@ class Store:
                 self.conn.execute(
                     "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
                     (SCHEMA_VERSION, now_iso()),
+                )
+            return
+        current = self.conn.execute(
+            "SELECT COALESCE(MAX(version), 1) FROM schema_migrations").fetchone()[0]
+        for version in range(current + 1, SCHEMA_VERSION + 1):
+            sql = _MIGRATIONS.get(version)
+            if sql is None:
+                raise RuntimeError(f"缺少 schema migration: v{version}")
+            with self._write():
+                self.conn.execute(sql)
+                self.conn.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, now_iso()),
                 )
 
     @contextmanager
@@ -159,14 +177,16 @@ class Store:
 
     # ---- decisions ----
 
-    def add_decision(self, node_id, mode, expression, auto_result, final_result, actor, comment=None):
+    def add_decision(self, node_id, mode, expression, auto_result, final_result,
+                     actor, comment=None, evidence=None):
         with self._write():
             self.conn.execute(
-                "INSERT INTO decisions(node_id, mode, expression, auto_result, final_result, actor, comment, decided_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO decisions(node_id, mode, expression, auto_result, final_result,"
+                " actor, comment, decided_at, evidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (node_id, mode, expression,
                  None if auto_result is None else int(bool(auto_result)),
-                 int(bool(final_result)), actor, comment, now_iso()),
+                 int(bool(final_result)), actor, comment, now_iso(),
+                 None if evidence is None else json.dumps(evidence, ensure_ascii=False)),
             )
 
     def latest_decision(self, node_id):

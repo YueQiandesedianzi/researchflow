@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -27,7 +28,8 @@ from researchflow.plan.model import load_plan, parse_binding
 from researchflow.registry.artifacts import abs_path, make_ref, register_artifact, verify_ref
 from researchflow.registry.store import Store
 from researchflow.runner import cache as cache_mod
-from researchflow.util import (dump_yaml, now_iso, read_json, sha256_json,
+from researchflow.util import (dump_yaml, now_iso, project_rel, read_json,
+                               sha256_file, sha256_json,
                                atomic_write_text, write_json_atomic)
 from researchflow.validation.gate import run_gate
 
@@ -116,11 +118,21 @@ class Executor:
             order = [nid for nid in order if nid in wanted]
         skipped: set = set()
         exit_code = 0
+        gates = gate_edges(self.plan)
         for nid in order:
             node = self.plan.get(nid)
-            if dependencies(node) & skipped:
+            # R2：数据依赖与控制（门禁）依赖统一参与失败/挂起传播；
+            # 标签继承阻塞因子的语义（awaiting / skipped(decision) / skipped）
+            control_deps = {g[0] for g in gates.get(nid, [])}
+            blockers = (dependencies(node) | control_deps) & skipped
+            if blockers:
                 skipped.add(nid)
-                self.results[nid] = "skipped"
+                if any(self.results.get(b) == "awaiting" for b in blockers):
+                    self.results[nid] = "awaiting"
+                elif any(self.results.get(b) == "skipped(decision)" for b in blockers):
+                    self.results[nid] = "skipped(decision)"
+                else:
+                    self.results[nid] = "skipped"
                 continue
             try:
                 self.results[nid] = self._run_node(node, no_cache=no_cache, yes=yes)
@@ -163,6 +175,22 @@ class Executor:
             if expect == "fail" and dec["final_result"]:
                 raise DecisionSkipped(f"决策 {dec_id} 已通过，on_fail 分支不执行")
 
+    def _file_deps(self, block, params) -> dict:
+        """file_params 声明的文件依赖：内容哈希进入新鲜度/缓存/证据指纹（R1）。"""
+        deps = {}
+        for param in block.file_params:
+            value = params.get(param)
+            if not isinstance(value, str):
+                continue
+            p = Path(value)
+            abs_path = p if p.is_absolute() else self.project.root / value
+            if not abs_path.is_file():
+                raise ContractError(
+                    f"积木 {block.id} 的文件依赖不存在: {value}（参数 {param}）")
+            deps[param] = {"path": project_rel(abs_path, self.project.root),
+                           "sha256": sha256_file(abs_path)}
+        return deps
+
     def _resolve_upstream_ref(self, up_id, up_port, consumer: str) -> dict:
         up_run = self.store.latest_run(up_id, ("validated",))
         if up_run is None:
@@ -192,7 +220,7 @@ class Executor:
                 refs[port] = self._resolve_upstream_ref(up_id, up_port, node.id)
         return refs
 
-    def _is_fresh(self, node, block, params, source_hash, input_refs):
+    def _is_fresh(self, node, block, params, source_hash, input_refs, file_deps):
         latest = self.store.latest_run(node.id, ("validated",))
         if latest is None:
             return None
@@ -208,6 +236,17 @@ class Executor:
             return None
         for port, ref in input_refs.items():
             if old_inputs.get(port, {}).get("sha256") != ref["sha256"]:
+                return None
+        # R1：文件依赖内容哈希（数据文件、模型配置等）
+        old_files = rj.get("files", {})
+        for param, dep in file_deps.items():
+            if old_files.get(param, {}).get("sha256") != dep["sha256"]:
+                return None
+        # R6：复用前校验该 Run 自身产物完整性（存在且哈希一致）
+        for row in self.store.artifacts_of(latest["run_id"]):
+            ok, _ = verify_ref(self.project.root,
+                               {"path": row["path"], "sha256": row["sha256"]})
+            if not ok:
                 return None
         return latest
 
@@ -227,27 +266,32 @@ class Executor:
                 raise ApprovalNeeded(f"积木 {block.ref} 需要人工审批（非交互环境请加 --yes）")
 
         expected_inputs = self._resolve_inputs(node, block)
+        file_deps = self._file_deps(block, params)
 
         if not no_cache:
-            latest = self._is_fresh(node, block, params, source_hash, expected_inputs)
+            latest = self._is_fresh(node, block, params, source_hash,
+                                    expected_inputs, file_deps)
             if latest is not None:
                 self.emit(f"= {node.id}: 输入未变，复用 {latest['run_id']}")
                 return ("fresh", latest["run_id"])
 
         cache_key = None
         if block.deterministic:
-            cache_key = cache_mod.make_cache_key(source_hash, params, expected_inputs)
+            cache_key = cache_mod.make_cache_key(source_hash, params,
+                                                 expected_inputs, file_deps)
             if not no_cache:
                 hit = self.store.find_cache(cache_key)
                 if hit is not None:
                     run_id = self._replay_cache(node, block, params, source_hash,
-                                                expected_inputs, cache_key, hit)
+                                                expected_inputs, file_deps, cache_key, hit)
                     if run_id is not None:
                         self.emit(f"≡ {node.id}: 缓存命中（源 {hit['run_id']}）→ {run_id}")
                         return ("cache", run_id)
-        return self._execute(node, block, params, source_hash, expected_inputs, cache_key)
+        return self._execute(node, block, params, source_hash,
+                             expected_inputs, file_deps, cache_key)
 
-    def _replay_cache(self, node, block, params, source_hash, input_refs, cache_key, hit):
+    def _replay_cache(self, node, block, params, source_hash, input_refs, file_deps,
+                      cache_key, hit):
         run_id = self.store.create_run(node.id, block.id, block.version_str, cache_key)
         run_dir = self.project.rf_dir / "runs" / run_id
         artifacts_dir = run_dir / "artifacts"
@@ -271,13 +315,13 @@ class Executor:
         self.store.add_validation(run_id, "cache_replay", True, f"源运行 {hit['run_id']}")
         write_json_atomic(run_dir / "validation.json", validations)
         run_json = self._build_run_json(run_id, node, block, params, source_hash, input_refs,
-                                        artifacts, metrics, validations, "validated", started,
-                                        t0, cache_key, None,
+                                        file_deps, artifacts, metrics, validations,
+                                        "validated", started, t0, cache_key, None,
                                         cache_info={"hit": True, "source_run": hit["run_id"]})
         self._finalize(run_id, run_dir, "validated", run_json)
         return run_id
 
-    def _execute(self, node, block, params, source_hash, input_refs, cache_key):
+    def _execute(self, node, block, params, source_hash, input_refs, file_deps, cache_key):
         run_id = self.store.create_run(node.id, block.id, block.version_str, cache_key)
         run_dir = self.project.rf_dir / "runs" / run_id
         artifacts_dir, logs_dir = run_dir / "artifacts", run_dir / "logs"
@@ -290,7 +334,13 @@ class Executor:
         artifacts, metrics, validations = {}, {}, []
         try:
             input_refs = self._materialize_values(input_refs, inputs_dir)
-            self._write_resolved(run_dir, node, block, params, source_hash, input_refs)
+            # R1：文件依赖快照进 Run 目录（可审计的原始内容）
+            for dep in file_deps.values():
+                src = self.project.root / dep["path"]
+                if src.is_file():
+                    shutil.copy2(src, inputs_dir / Path(dep["path"]).name)
+            self._write_resolved(run_dir, node, block, params, source_hash,
+                                 input_refs, file_deps)
             result = self._spawn(block, input_refs, params, run_dir, artifacts_dir, logs_dir)
             outputs = result.get("outputs", {})
             missing = [p for p in block.outputs if p not in outputs]
@@ -332,8 +382,8 @@ class Executor:
             error = f"{type(exc).__name__}: {exc}"
 
         run_json = self._build_run_json(run_id, node, block, params, source_hash, input_refs,
-                                        artifacts, metrics, validations, status, started, t0,
-                                        cache_key, error)
+                                        file_deps, artifacts, metrics, validations, status,
+                                        started, t0, cache_key, error)
         self._finalize(run_id, run_dir, status, run_json)
         if status == "validated":
             self.emit(f"✓ {node.id}: {run_id} validated（{time.monotonic() - t0:.1f}s）")
@@ -405,22 +455,59 @@ class Executor:
             context[port] = self.store.metrics_of(up_run["run_id"])
         return context
 
+    def _decision_evidence(self, node, criteria, context) -> dict:
+        """R3：决策依据指纹——上游 Run 与其指标摘要 + 判据表达式 + 节点配置摘要。
+
+        证据变化（上游结果更新、判据修改、配置调整）后，旧人工审批不再自动生效。
+        """
+        inputs_ev = {}
+        content_keys = {}
+        for port, binding in (node.inputs or {}).items():
+            if not (isinstance(binding, dict) and "from" in binding):
+                continue
+            up_id, up_port = parse_binding(binding["from"])
+            up_run = self.store.latest_run(up_id, ("validated",))
+            metrics_hash = sha256_json(context.get(port, {}))
+            content_keys[port] = {"metrics_sha256": metrics_hash, "from": binding["from"]}
+            if up_run is not None:
+                inputs_ev[port] = {"run_id": up_run["run_id"],
+                                   "metrics_sha256": metrics_hash,
+                                   "from": binding["from"]}
+        params_hash = sha256_json(node.params or {})
+        return {
+            "inputs": inputs_ev,
+            "expression": (criteria or {}).get("expression"),
+            "params_sha256": params_hash,
+            # 内容寻址摘要：同内容重跑/缓存回放不触发重新审批（R3 验收第二条）
+            "digest": sha256_json({
+                "inputs": content_keys,
+                "expression": (criteria or {}).get("expression"),
+                "params_sha256": params_hash,
+            }),
+        }
+
     def _run_decision(self, node, yes=False):
         criteria = node.criteria or {}
         mode = criteria.get("mode")
         expression = criteria.get("expression")
         context = self._decision_context(node)
         auto_result = evaluate_expression(expression, context) if expression else None
+        evidence = self._decision_evidence(node, criteria, context)
         if mode == "auto":
             self.store.add_decision(node.id, mode, expression, auto_result,
-                                    bool(auto_result), actor="auto")
+                                    bool(auto_result), actor="auto", evidence=evidence)
             self.emit(f"{'✓' if auto_result else '✗'} 决策 {node.id}: "
                       f"{'PASS' if auto_result else 'FAIL'}（{expression}）")
             return ("decided", bool(auto_result))
-        # manual / auto_then_manual：已有生效决策则沿用，不重复询问
+        # manual / auto_then_manual：仅当最新决策的证据摘要与当前一致才沿用（R3）
         existing = self.store.latest_decision(node.id)
-        if existing is not None:
-            return ("decided", bool(existing["final_result"]))
+        if existing is not None and existing["evidence"]:
+            try:
+                if json.loads(existing["evidence"]).get("digest") == evidence["digest"]:
+                    return ("decided", bool(existing["final_result"]))
+            except Exception:
+                pass
+            self.emit(f"⚠ 决策 {node.id}: 依据已变化（上游结果/判据/配置），需要重新确认")
         suggestion = ""
         if mode == "auto_then_manual" and auto_result is not None:
             suggestion = f"；自动判据建议 {'PASS' if auto_result else 'FAIL'}（{expression}）"
@@ -434,15 +521,19 @@ class Executor:
             raise ContractError(f"节点 {node_id} 不是决策节点")
         criteria = node.criteria or {}
         expression = criteria.get("expression")
+        context = {}
         auto_result = None
-        if expression:
-            try:
-                auto_result = evaluate_expression(expression, self._decision_context(node))
-            except Exception:
-                auto_result = None
+        try:
+            context = self._decision_context(node)
+            if expression:
+                auto_result = evaluate_expression(expression, context)
+        except Exception:
+            auto_result = None
+        evidence = self._decision_evidence(node, criteria, context)
         actor = f"human:{getpass.getuser()}"
         self.store.add_decision(node_id, criteria.get("mode", "manual"), expression,
-                                auto_result, passed, actor=actor, comment=comment)
+                                auto_result, passed, actor=actor, comment=comment,
+                                evidence=evidence)
         return {"node_id": node_id, "final": bool(passed),
                 "auto_suggestion": auto_result, "actor": actor}
 
@@ -481,7 +572,8 @@ class Executor:
                     pass
         return flat
 
-    def _write_resolved(self, run_dir, node, block, params, source_hash, input_refs):
+    def _write_resolved(self, run_dir, node, block, params, source_hash,
+                        input_refs, file_deps):
         resolved = {
             "run_node": node.id,
             "block": {"id": block.id, "version": block.version_str,
@@ -489,13 +581,14 @@ class Executor:
             "params": params,
             "inputs": {p: {k: v for k, v in r.items() if not k.startswith("_")}
                        for p, r in input_refs.items()},
+            "files": file_deps,
             "plan_digest": self.plan.digest(),
             "resolved_at": now_iso(),
         }
         atomic_write_text(Path(run_dir) / "resolved.yaml", dump_yaml(resolved))
 
     def _build_run_json(self, run_id, node, block, params, source_hash, input_refs,
-                        artifacts, metrics, validations, status, started, t0,
+                        file_deps, artifacts, metrics, validations, status, started, t0,
                         cache_key, error, cache_info=None):
         return {
             "run_id": run_id,
@@ -507,6 +600,7 @@ class Executor:
             "params_sha256": sha256_json(params),
             "inputs": {p: {k: v for k, v in r.items() if not k.startswith("_")}
                        for p, r in input_refs.items()},
+            "files": file_deps,
             "code": self._git(),
             "env": self._env(),
             "status": status,

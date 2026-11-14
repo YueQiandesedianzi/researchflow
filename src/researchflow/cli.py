@@ -48,7 +48,8 @@ def build_parser():
     sp.add_argument("--template", choices=["tabular", "timeseries"])
     sp.add_argument("--force", action="store_true", help="覆盖已存在文件")
 
-    add("doctor", help="一致性检查")
+    sp = add("doctor", help="一致性检查")
+    sp.add_argument("--deep", action="store_true", help="对产物做完整 sha256 校验（较慢）")
 
     sp = add("blocks", help="积木目录")
     sp.add_argument("action", choices=["list", "check", "new"])
@@ -117,7 +118,7 @@ def cmd_init(args):
 
 
 def cmd_doctor(args):
-    report = doctor(_open_project(args))
+    report = doctor(_open_project(args), deep=getattr(args, "deep", False))
     lines = [f"{'✓' if c['ok'] else '✗'} {c['name']}: {c['detail']}" for c in report["checks"]]
     return (0 if report["ok"] else 3), report, "\n".join(lines)
 

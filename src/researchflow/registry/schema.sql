@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS decisions (
   final_result INTEGER NOT NULL,        -- 1 pass / 0 fail
   actor        TEXT NOT NULL,           -- auto | human:<name>
   comment      TEXT,
-  decided_at   TEXT NOT NULL
+  decided_at   TEXT NOT NULL,
+  evidence     TEXT                     -- 决策依据指纹 JSON（上游 Run/产物摘要 + 判据）
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_node ON decisions(node_id);
 

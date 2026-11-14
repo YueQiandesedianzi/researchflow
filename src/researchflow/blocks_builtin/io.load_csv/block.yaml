@@ -22,6 +22,8 @@ params:
     target: {type: string, description: 目标列名（可选，记入 meta）}
     time_column: {type: string, description: 时间列名（可选，记入 meta）}
 
+file_params: [path]   # 数据文件内容进入新鲜度/缓存指纹
+
 validation:
   - file_exists
 

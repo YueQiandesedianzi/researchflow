@@ -36,6 +36,8 @@ params:
         {estimator: sklearn.xxx.Yyy, params: {...}, features: all_numeric|[列名],
          target: 列名, standardize: bool}
 
+file_params: [config]   # 模型配置内容进入新鲜度/缓存指纹
+
 validation:
   - file_exists
 

@@ -46,6 +46,7 @@ class Block:
     source: str             # builtin | pack:<entry-point> | project
     precedence: int         # project 3 > pack 2 > builtin 1
     dir: Path = field(default=None)
+    file_params: list = field(default_factory=list)  # 内容为文件路径的参数名（进入指纹）
 
     @property
     def ref(self) -> str:
@@ -187,6 +188,15 @@ def load_block(block_dir, source: str, precedence: int) -> Block:
     validation = _check_validation(data.get("validation"), errors)
     exec_spec = _check_execution(data.get("execution"), errors)
 
+    file_params = data.get("file_params") or []
+    if not isinstance(file_params, list) or not all(isinstance(p, str) for p in file_params):
+        errors.append("file_params: 必须是参数名数组")
+    else:
+        props = (params_schema or {}).get("properties", {})
+        for p in file_params:
+            if p not in props:
+                errors.append(f"file_params: {p!r} 不是已声明的参数")
+
     if errors:
         raise ContractError(f"积木契约校验失败: {manifest_path}", details=errors)
 
@@ -200,4 +210,5 @@ def load_block(block_dir, source: str, precedence: int) -> Block:
         requires_approval=exec_spec["requires_approval"],
         timeout_seconds=exec_spec["timeout_seconds"], env=exec_spec["env"],
         schema_version=sv, source=source, precedence=precedence, dir=block_dir,
+        file_params=list(file_params),
     )
